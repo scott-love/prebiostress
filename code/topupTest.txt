@@ -1,0 +1,50 @@
+#!/bin/bash
+cd /Volumes/data/prebiostress/data/topupTest
+
+# Indices to the b0 images
+# NB: that the indices are really indice-1 as fsl starts from zero and the image numbers from 1.
+# and also that here I did not take the very first b0 indice 0/1 to keep an even number from the
+b0Indices=(1 23 44 65 69 91 112 133)
+
+# seperate the b0s from the rest of the diffusion and put them in 1 4d file.
+# lr
+for var in "${b0Indices[@]}"
+do
+  fslroi sub-01_ses-1_acq-lr_dwi sub-01_ses-1_acq-lr_b0-$var $var 1
+done
+fslmerge -t sub-01_ses-1_acq-lr_b0 *-lr_b0-*
+rm *-lr_b0-*
+
+# rl
+for var in "${b0Indices[@]}"
+do
+  fslroi sub-01_ses-1_acq-rl_dwi sub-01_ses-1_acq-rl_b0-$var $var 1
+done
+fslmerge -t sub-01_ses-1_acq-rl_b0 *-rl_b0-*
+rm *-rl_b0-*
+
+# combine rl & lr
+fslmerge -t sub-01_ses-1_acq-both_b0 *b0*
+
+# run topup to create the deformation field
+topup --imain=sub-01_ses-1_acq-both_b0 --datain=my_acq_param.txt --config=b02b0.cnf --out=my_topup_results
+
+# apply the topup deformation field to the dwi data. The output is a single file that combines both lr and rl.
+applytopup --imain=sub-01_ses-1_acq-lr_dwi,sub-01_ses-1_acq-rl_dwi --inindex=1,2 --datain=my_acq_param.txt --topup=my_topup_results --out=my_hifi_images
+
+
+# EDDY : should Eddy be applied before or after TOPUP and to what images/s
+
+# https://lcni.uoregon.edu/kb-articles/preprocessing-of-diffusion-data-with-multiple-phase-encoding-directions
+
+# create index to my_acq_param.txt for the lr (starts at row 1) and rl (starts at row 9)
+indx=""
+for ((i=0; i<137; ++i)); do indx="$indx 1"; done
+for ((i=0; i<137; ++i)); do indx="$indx 9"; done
+echo $indx > index.txt
+
+# combine the bval and bvec for the 2 runs
+paste -d ' ' /Volumes/data/prebiostress/data/topupTest/sub-01_ses-1_acq-lr_dwi.bval /Volumes/data/prebiostress/data/topupTest/sub-01_ses-1_acq-rl_dwi.bval > bvals_lr-rl.txt
+paste -d ' ' /Volumes/data/prebiostress/data/topupTest/sub-01_ses-1_acq-lr_dwi.bvec /Volumes/data/prebiostress/data/topupTest/sub-01_ses-1_acq-rl_dwi.bvec > bvecs_lr-rl.txt
+
+eddy --imain=both_lr-rl.nii.gz --mask=sub-01_ses-1_brainmask.nii.gz --acqp=my_acq_param.txt --index=index.txt --bvecs=bvecs_lr-rl.txt --bvals=bvals_lr-rl.txt --topup=my_topup_results --out=eddy_corrected_dat -mb=3 -v
