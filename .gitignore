@@ -2,3 +2,10 @@
 *.nii
 *.nii.gz
 *.DS_Store
+images/
+derivatives/
+sequence_testing/
+sourcedata/
+topupTest/
+sub-18_ses-3_TotalBox*
+*Rhistory
